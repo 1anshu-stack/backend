@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import { User } from "../models/user.model.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js"
+import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 
 
@@ -116,7 +117,7 @@ const loginUser = asyncHandler(async (req, res) => {
     // send cookies
 
     const { email, username, password } = req.body;
-    // console.log(password)
+    // console.log(email)
 
     if (!(email || username)) {
         throw new ApiError(400, "username or email is require")
@@ -144,6 +145,7 @@ const loginUser = asyncHandler(async (req, res) => {
 
 
     const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
+    
 
     const options = {
         httpOnly: true,
@@ -196,7 +198,7 @@ const logoutUser = asyncHandler(async (req, res) => {
 
 
 
-const refreshAccesstoken = asyncHandler(async (req, res) => {
+const refreshAccesstoken = asyncHandler(async (req, res) => {   
     const incommingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
     if(!incommingRefreshToken){
@@ -220,8 +222,8 @@ const refreshAccesstoken = asyncHandler(async (req, res) => {
             throw new ApiError(401, "Refresh token is expired or used")
         }
     
-        const {accessToken, newRefreshToken} = await generateAccessAndRefreshTokens(user._id);
-    
+        const {accessToken, refreshToken} = await generateAccessAndRefreshTokens(user._id);
+
         const options = {
             httpOnly: true,
             secure: true
@@ -230,12 +232,12 @@ const refreshAccesstoken = asyncHandler(async (req, res) => {
         return res
         .status(201)
         .cookie("accessToken", accessToken, options)
-        .cookie("refreshToken", newRefreshToken, opitons)
+        .cookie("refreshToken", refreshToken, options)
         .json(
             new ApiResponse(
                 201, 
                 {
-                    accessToken, refreshToken: newRefreshToken
+                    accessToken, refreshToken
                 },
                 "access token refreshed"
             )
@@ -300,7 +302,7 @@ const updateAccountDetails = asyncHandler( async (req, res) => {
         {
             $set: {
                 fullName,
-                email
+                username
             }
         },
         {
@@ -366,7 +368,7 @@ const updateUserCoverImage = asyncHandler( async (req, res) => {
         throw new ApiError(402, "CoverImage file is missing")
     }
 
-    const coverImage = await uploadOnCloudinary(avatarLocalPath);
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
 
     if(!coverImage.url){
         throw new ApiError(400,"Error while uploading CoverImage")
@@ -398,6 +400,7 @@ const updateUserCoverImage = asyncHandler( async (req, res) => {
 
 const getUserChannelProfile =  asyncHandler(async(req, res) => {
     const {username} = req.params
+    console.log("username", username);
 
     if(!username?.trim()){
         throw new ApiError(400, "username is missing");
@@ -439,6 +442,7 @@ const getUserChannelProfile =  asyncHandler(async(req, res) => {
                 },
                 isSubscribed: {
                     $cond: {
+                        // the document you get in that doc i'm present or not
                         if: {$in: [req.user?._id, "$subscribers.subscriber"]},
                         then: true,
                         else: false
@@ -480,7 +484,7 @@ const getWatchHistory = asyncHandler( async(req, res) => {
             $match: {
                 _id: new mongoose.Types.ObjectId(req.user._id)
             }
-        },
+        },   
         {
             $lookup: {
                 from: "videos",
